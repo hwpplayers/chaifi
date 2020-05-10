@@ -10,7 +10,31 @@ import (
 )
 
 type Network struct {
-    ssid, bssid string
+    ssid, bssid, psk string
+    wpa bool
+}
+
+func genNetworkEntry(network Network) string {
+    result := ""
+    result += "network={\n"
+    if network.ssid != "" {
+        result += fmt.Sprintf("    ssid=\"%s\"\n", network.ssid)
+    } else if network.bssid != "" {
+        result += fmt.Sprintf("    bssid=\"%s\"\n", network.bssid)
+    }
+
+    keyMgmt := "NONE"
+    if network.wpa {
+        keyMgmt = "WPA-PSK"
+    }
+    result += fmt.Sprintf("    key_mgmt=%s\n", keyMgmt)
+
+    if network.psk != "" {
+        result += fmt.Sprintf("    psk=\"%s\"\n", network.ssid)
+    }
+
+    result += "}\n"
+    return result
 }
 
 func listScan(iface string) []Network {
@@ -43,7 +67,13 @@ func listScan(iface string) []Network {
         bssid := line[ssidEnd + 1:ssidEnd + 18]
         network := Network {ssid: ssid, bssid: bssid}
         result = append(result, network)
+
+        wpaPos := strings.Index(line, "WPA<") - 1
+        if wpaPos > 0 {
+            network.wpa = true
+        }
     }
+
     return result
 }
 
@@ -53,4 +83,6 @@ func main() {
     for _, net := range networks {
         fmt.Printf("===> [%s] %s\n", net.bssid, net.ssid)
     }
+
+    fmt.Println(genNetworkEntry(networks[0]))
 }
