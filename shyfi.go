@@ -3,10 +3,13 @@
 package main
 
 import (
-    "strings"
-    "fmt"
+    "bufio"
     "bytes"
+    "fmt"
+    "log"
+    "os"
     "os/exec"
+    "strings"
 )
 
 type Network struct {
@@ -35,6 +38,68 @@ func genNetworkEntry(network Network) string {
 
     result += "}\n"
     return result
+}
+
+func loadConfFile(path string) {
+    file, err := os.Open(path)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer file.Close()
+
+    scanner := bufio.NewScanner(file)
+    inGeneratedSection := false
+    var network *Network = nil
+    for scanner.Scan() {
+        line := scanner.Text()
+        if strings.Index(line, "# SHYFI:") == 0 {
+            inGeneratedSection = true
+            continue
+        }
+        if !inGeneratedSection {
+            continue
+        }
+        line = strings.Trim(line, " ")
+        if len(line) == 0 {
+            continue
+        }
+
+        if line == "network={" {
+            network = & Network{}
+            continue
+        }
+
+        if line == "}" {
+            fmt.Println(network)
+            continue
+        }
+
+        // Split key/value
+        parts := strings.SplitN(line, "=", 2)
+        if len(parts) != 2 {
+        }
+
+        key := parts[0]
+        value := parts[1]
+        switch key {
+        case "ssid":
+            network.ssid = value
+        case "bssid":
+            network.bssid = value
+        case "psk":
+            network.psk = value
+        case "key_mgmt":
+            network.wpa = value == "WPA-PSK"
+        default:
+            // TODO: raise error
+        }
+
+        fmt.Println(parts)
+    }
+
+    if err := scanner.Err(); err != nil {
+        log.Fatal(err)
+    }
 }
 
 func listScan(iface string) []Network {
@@ -85,4 +150,5 @@ func main() {
     }
 
     fmt.Println(genNetworkEntry(networks[0]))
+    loadConfFile("wpa_supplicant.conf")
 }
