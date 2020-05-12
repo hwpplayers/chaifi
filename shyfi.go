@@ -14,8 +14,8 @@ import (
     "sort"
     "strings"
 
-	ui "github.com/gizak/termui/v3"
-	"github.com/gizak/termui/v3/widgets"
+    ui "github.com/gizak/termui/v3"
+    "github.com/gizak/termui/v3/widgets"
 )
 
 const shyfi_marker = "# SHYFI: DO NOT EDIT BELOW THIS LINE"
@@ -169,6 +169,11 @@ func listScan(iface string) []Network {
         }
         ssid := line[:ssidEnd]
         ssid = strings.Trim(ssid, " ")
+
+        // For now just skip networks with empty SSID
+        if ssid == "" {
+            continue
+        }
         bssid := line[ssidEnd + 1:ssidEnd + 18]
         network := Network {ssid: ssid, bssid: bssid}
 
@@ -251,73 +256,103 @@ func generateUIRows(networks []Network, knownNetworks []Network) []string {
 
 func main() {
     networks := listScan("wlan0")
-    fmt.Printf("Total networks: %d\n", len(networks))
 
+    // load known networks from the config file
     knownNetworks, err := loadConfFile("wpa_supplicant.conf.orig")
     if err != nil {
         log.Fatal(err)
     }
 
-    for _, net := range knownNetworks {
-        fmt.Printf("===> [%s] %s\n", net.bssid, net.ssid)
-    }
+    // save edited known networks on exit
+    defer func() {
+        updateConfFile("wpa_supplicant.conf", knownNetworks)
+    }()
 
-    // updateConfFile("wpa_supplicant.conf", knownNetworks)
-
+    // Initialize and procede with UI
     if err := ui.Init(); err != nil {
             log.Fatalf("failed to initialize termui: %v", err)
     }
     defer ui.Close()
 
-	l := widgets.NewList()
-	l.Title = "WiFi Networks"
-	l.Rows = generateUIRows(networks, knownNetworks)
-	l.TextStyle = ui.NewStyle(ui.ColorYellow)
-	l.WrapText = false
+    l := widgets.NewList()
+    l.Title = "WiFi Networks"
+    l.Rows = generateUIRows(networks, knownNetworks)
+    l.TextStyle = ui.NewStyle(ui.ColorYellow)
+    l.WrapText = false
     uiW, uiH := ui.TerminalDimensions()
     listW := 80
     listH := 25
     x := (uiW - listW) / 2
     y := (uiH - listH) / 2
-	l.SetRect(x, y, x + listW, y + listH)
+    l.SetRect(x, y, x + listW, y + listH)
 
-	ui.Render(l)
+    // status line with key help
+    p0 := widgets.NewParagraph()
+    p0.Text = "[a](fg:green) - add network, [x](fg:green) - delete network, [q](fg:green) - quit"
+    p0.SetRect(x, y + listH + 1, x + listW, y + listH + 2)
+    p0.Border = false
 
-	previousKey := ""
-	uiEvents := ui.PollEvents()
-	for {
-		e := <-uiEvents
-		switch e.ID {
-		case "q", "<C-c>":
-			return
-		case "j", "<Down>":
-			l.ScrollDown()
-		case "k", "<Up>":
-			l.ScrollUp()
-		case "<C-d>":
-			l.ScrollHalfPageDown()
-		case "<C-u>":
-			l.ScrollHalfPageUp()
-		case "<C-f>":
-			l.ScrollPageDown()
-		case "<C-b>":
-			l.ScrollPageUp()
-		case "g":
-			if previousKey == "g" {
-				l.ScrollTop()
-			}
-		case "<Home>":
-			l.ScrollTop()
-		case "G", "<End>":
-			l.ScrollBottom()
-		}
+    ui.Render(l)
+    ui.Render(p0)
 
-		if previousKey == "g" {
-			previousKey = ""
-		} else {
-			previousKey = e.ID
-		}
+    previousKey := ""
+    uiEvents := ui.PollEvents()
+    for {
+        e := <-uiEvents
+        switch e.ID {
+        case "q", "<C-c>":
+            return
+        case "j", "<Down>":
+            l.ScrollDown()
+        case "k", "<Up>":
+            l.ScrollUp()
+        case "<C-d>":
+            l.ScrollHalfPageDown()
+        case "<C-u>":
+            l.ScrollHalfPageUp()
+        case "<C-f>", "<PageDown>":
+            l.ScrollPageDown()
+        case "<C-b>", "<PageUp>":
+            l.ScrollPageUp()
+        case "g":
+            if previousKey == "g" {
+                l.ScrollTop()
+            }
+        case "<Home>":
+            l.ScrollTop()
+        case "G", "<End>":
+            l.ScrollBottom()
+        case "a":
+            selectedNet := networks[l.SelectedRow]
+            found := false
+            // check if the network is in the known list and if not - add it
+            for _, net := range knownNetworks {
+                if net.ssid == selectedNet.ssid {
+                    found = true
+                    break
+                }
+            }
+            if ! found {
+                knownNetworks = append(knownNetworks, selectedNet)
+            }
+            l.Rows = generateUIRows(networks, knownNetworks)
+        case "x":
+            selectedNet := networks[l.SelectedRow]
+            // find and delete SSID from the list of known networks
+            for i, net := range knownNetworks {
+                if net.ssid == selectedNet.ssid {
+                    knownNetworks = append(knownNetworks[:i], knownNetworks[i+1:]...)
+                }
+            }
+            l.Rows = generateUIRows(networks, knownNetworks)
+        }
 
-		ui.Render(l)
-	}
+        if previousKey == "g" {
+            previousKey = ""
+        } else {
+            previousKey = e.ID
+        }
+
+        ui.Render(l)
+    }
 }
