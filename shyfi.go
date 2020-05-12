@@ -306,10 +306,17 @@ func main() {
     }
     defer ui.Close()
 
+    // additional colors
+    const ColorLightGreen ui.Color = 10
+    const ColorLightWhite ui.Color = 15
+
     l := widgets.NewList()
-    l.Title = "WiFi Networks"
+    l.Title = "[ WiFi Networks ]"
     l.Rows = generateUIRows(networks, knownNetworks)
-    l.TextStyle = ui.NewStyle(ui.ColorYellow)
+    l.BorderStyle = ui.NewStyle(ui.ColorWhite)
+    l.TitleStyle = ui.NewStyle(ui.ColorBlack, ColorLightWhite)
+    l.TextStyle = ui.NewStyle(ColorLightWhite)
+    l.SelectedRowStyle = ui.NewStyle(ui.ColorBlack, ColorLightWhite)
     l.WrapText = false
     uiW, uiH := ui.TerminalDimensions()
     listW := 80
@@ -320,13 +327,17 @@ func main() {
 
     // status line with key help
     p0 := widgets.NewParagraph()
+    p0.TextStyle = ui.NewStyle(15)
     p0.Text = "[a](fg:green) - add network, [x](fg:green) - delete network, [q](fg:green) - quit"
     p0.SetRect(x, y + listH + 1, x + listW, y + listH + 2)
     p0.Border = false
 
-    // status line with key help
+    // password entry field
     pwInput := widgets.NewParagraph()
-    pwInput.Title = "Password"
+    pwInput.TextStyle = ui.NewStyle(ColorLightGreen)
+    pwInput.BorderStyle = ui.NewStyle(ui.ColorGreen)
+    pwInput.TitleStyle = ui.NewStyle(ColorLightGreen)
+    pwInput.Title = "[ Password ]"
     pwInput.Text = ""
     passwordW := 60
     passwordH := 3
@@ -356,12 +367,12 @@ func main() {
                     l.Rows = generateUIRows(networks, knownNetworks)
                     passwordPromptVisible = false
                     password = ""
-                case "<Escape>":
+                case "<Escape>", "<C-c>":
                     passwordPromptVisible = false
                     password = ""
                 case "<C-u>":
                     password = ""
-                case "<Backspace>":
+                case "<Backspace>", "<C-<Backspace>>":
                     password = password[:len(password)-1]
                 case "<Space>":
                     password = password + " "
