@@ -292,67 +292,98 @@ func main() {
     p0.SetRect(x, y + listH + 1, x + listW, y + listH + 2)
     p0.Border = false
 
+    // status line with key help
+    pwInput := widgets.NewParagraph()
+    pwInput.Title = "Password"
+    pwInput.Text = ""
+    passwordW := 60
+    passwordH := 3
+    x = (uiW - passwordW) / 2
+    y = (uiH - passwordH) / 2
+    pwInput.SetRect(x, y, x + passwordW, y + passwordH)
+    pwInput.Border = true
+
     ui.Render(l)
     ui.Render(p0)
 
-    previousKey := ""
+    passwordPromptVisible := false
+    password := ""
     uiEvents := ui.PollEvents()
     for {
         e := <-uiEvents
-        switch e.ID {
-        case "q", "<C-c>":
-            return
-        case "j", "<Down>":
-            l.ScrollDown()
-        case "k", "<Up>":
-            l.ScrollUp()
-        case "<C-d>":
-            l.ScrollHalfPageDown()
-        case "<C-u>":
-            l.ScrollHalfPageUp()
-        case "<C-f>", "<PageDown>":
-            l.ScrollPageDown()
-        case "<C-b>", "<PageUp>":
-            l.ScrollPageUp()
-        case "g":
-            if previousKey == "g" {
-                l.ScrollTop()
-            }
-        case "<Home>":
-            l.ScrollTop()
-        case "G", "<End>":
-            l.ScrollBottom()
-        case "a":
-            selectedNet := networks[l.SelectedRow]
-            found := false
-            // check if the network is in the known list and if not - add it
-            for _, net := range knownNetworks {
-                if net.ssid == selectedNet.ssid {
-                    found = true
-                    break
+        if passwordPromptVisible {
+            if len(e.ID) == 1 {
+                password = password + e.ID
+            } else {
+                switch e.ID {
+                case "<Enter>":
+                    // update or add new network
+                    selectedNet := networks[l.SelectedRow]
+                    selectedNet.psk = password
+                    found := false
+                    // check if the network is in the known list and if not - add it
+                    for _, net := range knownNetworks {
+                        if net.ssid == selectedNet.ssid {
+                            found = true
+                            break
+                        }
+                    }
+                    if ! found {
+                        knownNetworks = append(knownNetworks, selectedNet)
+                    }
+                    l.Rows = generateUIRows(networks, knownNetworks)
+                    passwordPromptVisible = false
+                    password = ""
+                case "<Escape>":
+                    passwordPromptVisible = false
+                    password = ""
+                case "<C-u>":
+                    password = ""
+                case "<Backspace>":
+                    password = password[:len(password)-1]
+                case "<Space>":
+                    password = password + " "
                 }
             }
-            if ! found {
-                knownNetworks = append(knownNetworks, selectedNet)
-            }
-            l.Rows = generateUIRows(networks, knownNetworks)
-        case "x":
-            selectedNet := networks[l.SelectedRow]
-            // find and delete SSID from the list of known networks
-            for i, net := range knownNetworks {
-                if net.ssid == selectedNet.ssid {
-                    knownNetworks = append(knownNetworks[:i], knownNetworks[i+1:]...)
-                }
-            }
-            l.Rows = generateUIRows(networks, knownNetworks)
-        }
-
-        if previousKey == "g" {
-            previousKey = ""
+            pwInput.Text = password
         } else {
-            previousKey = e.ID
+            switch e.ID {
+            case "q", "<C-c>":
+                return
+            case "j", "<Down>":
+                l.ScrollDown()
+            case "k", "<Up>":
+                l.ScrollUp()
+            case "<C-d>":
+                l.ScrollHalfPageDown()
+            case "<C-u>":
+                l.ScrollHalfPageUp()
+            case "<C-f>", "<PageDown>":
+                l.ScrollPageDown()
+            case "<C-b>", "<PageUp>":
+                l.ScrollPageUp()
+            case "<Home>":
+                l.ScrollTop()
+            case "<End>":
+                l.ScrollBottom()
+            case "a":
+                passwordPromptVisible = true
+            case "x":
+                selectedNet := networks[l.SelectedRow]
+                // find and delete SSID from the list of known networks
+                for i, net := range knownNetworks {
+                    if net.ssid == selectedNet.ssid {
+                        knownNetworks = append(knownNetworks[:i], knownNetworks[i+1:]...)
+                    }
+                }
+                l.Rows = generateUIRows(networks, knownNetworks)
+            }
         }
 
-        ui.Render(l)
+        if passwordPromptVisible {
+            ui.Render(pwInput)
+        } else {
+            ui.Render(l)
+        }
     }
 }
