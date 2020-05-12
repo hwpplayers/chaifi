@@ -7,6 +7,7 @@ import (
     "bytes"
     "errors"
     "io"
+    "flag"
     "fmt"
     "log"
     "os"
@@ -267,17 +268,25 @@ func addNetwork(networks []Network, newNet Network) []Network {
 }
 
 func main() {
-    networks := listScan("wlan0")
+    var iface string
+    var wpa_conf_file string
+
+    flag.StringVar(&iface, "i", "wlan0", "wireless interface")
+    flag.StringVar(&wpa_conf_file, "f", "/etc/wpa_supplicant.conf", "path to wpa_supplicant.conf")
+
+    flag.Parse()
+
+    networks := listScan(iface)
 
     // load known networks from the config file
-    knownNetworks, err := loadConfFile("wpa_supplicant.conf.orig")
+    knownNetworks, err := loadConfFile(wpa_conf_file)
     if err != nil {
         log.Fatal(err)
     }
 
     // save edited known networks on exit
     defer func() {
-        updateConfFile("wpa_supplicant.conf", knownNetworks)
+        updateConfFile(wpa_conf_file, knownNetworks)
     }()
 
     // Initialize and procede with UI
