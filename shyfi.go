@@ -11,14 +11,18 @@ import (
     "log"
     "os"
     "os/exec"
+    "sort"
     "strings"
+
+	ui "github.com/gizak/termui/v3"
+	"github.com/gizak/termui/v3/widgets"
 )
 
 const shyfi_marker = "# SHYFI: DO NOT EDIT BELOW THIS LINE"
 
 type Network struct {
     ssid, bssid, psk string
-    wpa bool
+    security bool
 }
 
 // simplified escape algorithm: escape backslash(\) and double quotes
@@ -58,7 +62,7 @@ func genNetworkEntry(network Network) string {
     }
 
     keyMgmt := "NONE"
-    if network.wpa {
+    if network.security {
         keyMgmt = "WPA-PSK"
     }
     result += fmt.Sprintf("    key_mgmt=%s\n", keyMgmt)
@@ -125,7 +129,7 @@ func loadConfFile(path string) ([]Network, error) {
         case "psk":
             network.psk = value
         case "key_mgmt":
-            network.wpa = value == "WPA-PSK"
+            network.security = value == "WPA-PSK"
         default:
             // TODO: raise error
         }
@@ -167,13 +171,18 @@ func listScan(iface string) []Network {
         ssid = strings.Trim(ssid, " ")
         bssid := line[ssidEnd + 1:ssidEnd + 18]
         network := Network {ssid: ssid, bssid: bssid}
-        result = append(result, network)
 
         wpaPos := strings.Index(line, "WPA<") - 1
-        if wpaPos > 0 {
-            network.wpa = true
+        rsnPos := strings.Index(line, "RSN<") - 1
+        if wpaPos > 0 || rsnPos > 0 {
+            network.security = true
         }
+        result = append(result, network)
     }
+
+    sort.Slice(result, func(i, j int) bool {
+       return result[i].ssid < result[j].ssid
+    })
 
     return result
 }
@@ -211,17 +220,104 @@ func updateConfFile(path string, networks []Network) {
     file.Close()
 }
 
+func generateUIRows(networks []Network, knownNetworks []Network) []string {
+    result := []string{}
+
+    for _, net := range networks {
+        if net.ssid == "" {
+            continue
+        }
+        found := false
+        for _, n := range knownNetworks {
+            if n.ssid == net.ssid {
+                found = true
+                break
+            }
+        }
+        foundMark := ' '
+        if found {
+            foundMark = '+'
+        }
+        security := ""
+        if net.security {
+            security = "WPA"
+        }
+        row := fmt.Sprintf(" [%c] %-50s %s", foundMark, net.ssid, security)
+        result = append(result, row)
+    }
+
+    return result
+}
+
 func main() {
     networks := listScan("wlan0")
     fmt.Printf("Total networks: %d\n", len(networks))
-    for _, net := range networks {
-        fmt.Printf("===> [%s] %s\n", net.bssid, net.ssid)
-    }
 
     knownNetworks, err := loadConfFile("wpa_supplicant.conf.orig")
     if err != nil {
         log.Fatal(err)
     }
 
-    updateConfFile("wpa_supplicant.conf", knownNetworks)
+    for _, net := range knownNetworks {
+        fmt.Printf("===> [%s] %s\n", net.bssid, net.ssid)
+    }
+
+    // updateConfFile("wpa_supplicant.conf", knownNetworks)
+
+    if err := ui.Init(); err != nil {
+            log.Fatalf("failed to initialize termui: %v", err)
+    }
+    defer ui.Close()
+
+	l := widgets.NewList()
+	l.Title = "WiFi Networks"
+	l.Rows = generateUIRows(networks, knownNetworks)
+	l.TextStyle = ui.NewStyle(ui.ColorYellow)
+	l.WrapText = false
+    uiW, uiH := ui.TerminalDimensions()
+    listW := 80
+    listH := 25
+    x := (uiW - listW) / 2
+    y := (uiH - listH) / 2
+	l.SetRect(x, y, x + listW, y + listH)
+
+	ui.Render(l)
+
+	previousKey := ""
+	uiEvents := ui.PollEvents()
+	for {
+		e := <-uiEvents
+		switch e.ID {
+		case "q", "<C-c>":
+			return
+		case "j", "<Down>":
+			l.ScrollDown()
+		case "k", "<Up>":
+			l.ScrollUp()
+		case "<C-d>":
+			l.ScrollHalfPageDown()
+		case "<C-u>":
+			l.ScrollHalfPageUp()
+		case "<C-f>":
+			l.ScrollPageDown()
+		case "<C-b>":
+			l.ScrollPageUp()
+		case "g":
+			if previousKey == "g" {
+				l.ScrollTop()
+			}
+		case "<Home>":
+			l.ScrollTop()
+		case "G", "<End>":
+			l.ScrollBottom()
+		}
+
+		if previousKey == "g" {
+			previousKey = ""
+		} else {
+			previousKey = e.ID
+		}
+
+		ui.Render(l)
+	}
 }
