@@ -21,7 +21,7 @@ import (
 const shyfi_marker = "# SHYFI: DO NOT EDIT BELOW THIS LINE"
 
 type Network struct {
-    ssid, bssid, psk string
+    ssid, psk string
     security bool
 }
 
@@ -57,8 +57,6 @@ func genNetworkEntry(network Network) string {
     result += "network={\n"
     if network.ssid != "" {
         result += fmt.Sprintf("    ssid=\"%s\"\n", escapeString(network.ssid))
-    } else if network.bssid != "" {
-        result += fmt.Sprintf("    bssid=\"%s\"\n", escapeString(network.bssid))
     }
 
     keyMgmt := "NONE"
@@ -124,8 +122,6 @@ func loadConfFile(path string) ([]Network, error) {
         switch key {
         case "ssid":
             network.ssid = value
-        case "bssid":
-            network.bssid = value
         case "psk":
             network.psk = value
         case "key_mgmt":
@@ -174,14 +170,14 @@ func listScan(iface string) []Network {
         if ssid == "" {
             continue
         }
-        bssid := line[ssidEnd + 1:ssidEnd + 18]
-        network := Network {ssid: ssid, bssid: bssid}
 
+        security := false
         wpaPos := strings.Index(line, "WPA<") - 1
         rsnPos := strings.Index(line, "RSN<") - 1
         if wpaPos > 0 || rsnPos > 0 {
-            network.security = true
+            security = true
         }
+        network := Network {ssid: ssid, security: security}
         result = append(result, network)
     }
 
@@ -254,6 +250,22 @@ func generateUIRows(networks []Network, knownNetworks []Network) []string {
     return result
 }
 
+func addNetwork(networks []Network, newNet Network) []Network {
+    found := false
+    // check if the network is in the known list and if not - add it
+    for _, net := range networks {
+        if net.ssid == newNet.ssid {
+            found = true
+            break
+        }
+    }
+    if ! found {
+        networks = append(networks, newNet)
+    }
+
+    return networks
+}
+
 func main() {
     networks := listScan("wlan0")
 
@@ -320,17 +332,7 @@ func main() {
                     // update or add new network
                     selectedNet := networks[l.SelectedRow]
                     selectedNet.psk = password
-                    found := false
-                    // check if the network is in the known list and if not - add it
-                    for _, net := range knownNetworks {
-                        if net.ssid == selectedNet.ssid {
-                            found = true
-                            break
-                        }
-                    }
-                    if ! found {
-                        knownNetworks = append(knownNetworks, selectedNet)
-                    }
+                    knownNetworks = addNetwork(knownNetworks, selectedNet)
                     l.Rows = generateUIRows(networks, knownNetworks)
                     passwordPromptVisible = false
                     password = ""
@@ -367,7 +369,13 @@ func main() {
             case "<End>":
                 l.ScrollBottom()
             case "a":
-                passwordPromptVisible = true
+                selectedNet := networks[l.SelectedRow]
+                if selectedNet.security {
+                    passwordPromptVisible = true
+                } else {
+                    knownNetworks = addNetwork(knownNetworks, selectedNet)
+                    l.Rows = generateUIRows(networks, knownNetworks)
+                }
             case "x":
                 selectedNet := networks[l.SelectedRow]
                 // find and delete SSID from the list of known networks
