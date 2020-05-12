@@ -172,6 +172,17 @@ func listScan(iface string) []Network {
             continue
         }
 
+        found := false
+        for _, n := range result {
+            if n.ssid == ssid {
+                found = true
+                break
+            }
+        }
+        if found {
+            continue
+        }
+
         security := false
         wpaPos := strings.Index(line, "WPA<") - 1
         rsnPos := strings.Index(line, "RSN<") - 1
