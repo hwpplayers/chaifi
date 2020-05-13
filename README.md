@@ -22,4 +22,4 @@ Usage of ./chaifi:
 
 ## Screenshot
 
-![Screenshot of Chai-Fi][screenshot.png]
+![Screenshot of Chai-Fi](screenshot.png)
