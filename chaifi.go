@@ -19,7 +19,7 @@ import (
     "github.com/gizak/termui/v3/widgets"
 )
 
-const shyfi_marker = "# SHYFI: DO NOT EDIT BELOW THIS LINE"
+const chaifi_marker = "# CHAIFI: DO NOT EDIT BELOW THIS LINE"
 
 type Network struct {
     ssid, psk string
@@ -88,7 +88,7 @@ func loadConfFile(path string) ([]Network, error) {
     var network *Network = nil
     for scanner.Scan() {
         line := scanner.Text()
-        if strings.Index(line, shyfi_marker) == 0 {
+        if strings.Index(line, chaifi_marker) == 0 {
             inGeneratedSection = true
             continue
         }
@@ -213,14 +213,14 @@ func updateConfFile(path string, networks []Network) {
     for scanner.Scan() {
         line := scanner.Text()
         newContent = newContent + line + "\n"
-        if strings.Index(line, shyfi_marker) == 0 {
+        if strings.Index(line, chaifi_marker) == 0 {
             hasGeneratedSection = true
             break
         }
     }
 
     if ! hasGeneratedSection {
-        newContent = newContent + shyfi_marker + "\n"
+        newContent = newContent + chaifi_marker + "\n"
     }
 
     for _, net := range networks {
