@@ -255,7 +255,7 @@ func generateUIRows(networks []Network, knownNetworks []Network) []string {
         if net.security {
             security = "WPA"
         }
-        row := fmt.Sprintf(" [%c] %-50s %s", foundMark, net.ssid, security)
+        row := fmt.Sprintf(" [%c] %-67s %s", foundMark, net.ssid, security)
         result = append(result, row)
     }
 
