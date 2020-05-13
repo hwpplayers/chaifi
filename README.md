@@ -13,7 +13,7 @@ go build
 
 ## Usage
 ```
-Usage of ./chaifi:
+Usage of chaifi:
   -f string
     	path to wpa_supplicant.conf (default "/etc/wpa_supplicant.conf")
   -i string
