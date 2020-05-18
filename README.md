@@ -27,6 +27,7 @@ Usage of chaifi:
     	path to wpa_supplicant.conf (default "/etc/wpa_supplicant.conf")
   -i string
     	wireless interface (default "wlan0")
+  -r	restart netif service if config has changed
 ```
 
 ## Screenshot

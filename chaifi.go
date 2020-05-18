@@ -231,22 +231,27 @@ func listScan(iface string) []Network {
     return result
 }
 
-func updateConfFile(path string, networks []Network) {
+// update wpa_supplicant.conf (if required) and return
+// true if new file was written, otherwise false
+func updateConfFile(path string, networks []Network) bool {
     file, err := os.OpenFile(path, os.O_RDWR, 0600)
     if err != nil {
         log.Fatal(err)
     }
 
     newContent := ""
+    oldContent := ""
 
     scanner := bufio.NewScanner(file)
     hasGeneratedSection := false
     for scanner.Scan() {
         line := scanner.Text()
-        newContent = newContent + line + "\n"
+        if ! hasGeneratedSection {
+            newContent = newContent + line + "\n"
+        }
+        oldContent = oldContent + line + "\n"
         if strings.Index(line, chaifi_marker) == 0 {
             hasGeneratedSection = true
-            break
         }
     }
 
@@ -258,10 +263,16 @@ func updateConfFile(path string, networks []Network) {
         newContent = newContent + genNetworkEntry(net) + "\n"
     }
 
+    if oldContent == newContent {
+        return false
+    }
+
     file.Seek(0, io.SeekStart)
     file.Truncate(0)
     file.WriteString (newContent)
     file.Close()
+
+    return true
 }
 
 func updateTui(tui *Tui, networks []Network, knownNetworks []Network) {
@@ -384,9 +395,11 @@ func resizeTui(tui *Tui) {
 func main() {
     var iface string
     var wpa_conf_file string
+    var restart_network bool
 
     flag.StringVar(&iface, "i", "wlan0", "wireless interface")
     flag.StringVar(&wpa_conf_file, "f", "/etc/wpa_supplicant.conf", "path to wpa_supplicant.conf")
+    flag.BoolVar(&restart_network, "r", false, "restart netif service if config has changed")
 
     flag.Parse()
 
@@ -398,16 +411,28 @@ func main() {
         log.Fatal(err)
     }
 
-    // save edited known networks on exit
-    defer func() {
-        updateConfFile(wpa_conf_file, knownNetworks)
-    }()
-
     // Initialize and procede with UI
     if err := ui.Init(); err != nil {
             log.Fatalf("failed to initialize termui: %v", err)
     }
-    defer ui.Close()
+
+    // save edited known networks on exit
+    defer func() {
+        ui.Close()
+        haveNewConfig := updateConfFile(wpa_conf_file, knownNetworks)
+        if haveNewConfig {
+            if restart_network {
+                fmt.Println ("new config, restarting network...")
+                cmd := exec.Command("service", "netif", "restart", iface)
+                cmd.Run()
+            } else {
+                fmt.Printf ("new config, please run \"service netif restart %s\" manually\n", iface)
+            }
+        } else {
+            fmt.Println ("config file was not changed")
+        }
+    }()
+
 
     tui := newTui()
     resizeTui(tui)
