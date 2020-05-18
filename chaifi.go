@@ -50,6 +50,13 @@ type Network struct {
     security bool
 }
 
+type Tui struct {
+    list *widgets.List
+    help *widgets.Paragraph
+    password *widgets.Paragraph
+    listWidth int
+}
+
 // simplified escape algorithm: escape backslash(\) and double quotes
 func escapeString(val string) string {
     escaped := strings.ReplaceAll(val, "\\", "\\\\")
@@ -257,7 +264,7 @@ func updateConfFile(path string, networks []Network) {
     file.Close()
 }
 
-func generateUIRows(networks []Network, knownNetworks []Network) []string {
+func updateTui(tui *Tui, networks []Network, knownNetworks []Network) {
     result := []string{}
 
     for _, net := range networks {
@@ -279,11 +286,19 @@ func generateUIRows(networks []Network, knownNetworks []Network) []string {
         if net.security {
             security = "WPA"
         }
-        row := fmt.Sprintf(" [%c] %-67s %s", foundMark, net.ssid, security)
+        // substract prefix part and security suffix part
+        // scrollbar and borders
+        ssidW := tui.listWidth - 5 - 5 - 1 - 2
+        spaces := ssidW - len(net.ssid)
+        ssid := net.ssid
+        for spaces > 0 {
+            spaces -= 1
+            ssid = ssid + " "
+        }
+        row := fmt.Sprintf(" [%c] %s %s", foundMark, ssid, security)
         result = append(result, row)
     }
-
-    return result
+    tui.list.Rows = result
 }
 
 func addNetwork(networks []Network, newNet Network) []Network {
@@ -300,6 +315,70 @@ func addNetwork(networks []Network, newNet Network) []Network {
     }
 
     return networks
+}
+
+func newTui() *Tui {
+    tui := new(Tui)
+
+    // additional colors
+    const ColorLightGreen ui.Color = 10
+    const ColorLightWhite ui.Color = 15
+
+    tui.list = widgets.NewList()
+    tui.list.Title = "[ WiFi Networks ]"
+    tui.list.BorderStyle = ui.NewStyle(ui.ColorWhite)
+    tui.list.TitleStyle = ui.NewStyle(ui.ColorBlack, ColorLightWhite)
+    tui.list.TextStyle = ui.NewStyle(ColorLightWhite)
+    tui.list.SelectedRowStyle = ui.NewStyle(ui.ColorBlack, ColorLightWhite)
+    tui.list.WrapText = false
+
+    // status line with key help
+    tui.help = widgets.NewParagraph()
+    tui.help.TextStyle = ui.NewStyle(15)
+    tui.help.Text = "[a](fg:green) - add network, [x](fg:green) - delete network, [q](fg:green) - quit"
+    tui.help.Border = false
+
+    // password entry field
+    tui.password = widgets.NewParagraph()
+    tui.password.TextStyle = ui.NewStyle(ColorLightGreen)
+    tui.password.BorderStyle = ui.NewStyle(ui.ColorGreen)
+    tui.password.TitleStyle = ui.NewStyle(ColorLightGreen)
+    tui.password.Title = "[ Password ]"
+    tui.password.Text = ""
+    tui.password.Border = true
+
+    return tui
+}
+
+func resizeTui(tui *Tui) {
+    uiW, uiH := ui.TerminalDimensions()
+
+    listW := uiW
+    listH := uiH - 3
+
+    if listW > 80 {
+        listW = 80
+    }
+
+    if listH > 25 {
+        listH = 25
+    }
+
+    // store width for rows padding
+    tui.listWidth = listW
+
+    x := (uiW - listW) / 2
+    y := (uiH - listH) / 2
+
+    tui.list.SetRect(x, y, x + listW, y + listH)
+
+    tui.help.SetRect(x, y + listH + 1, x + listW, y + listH + 2)
+
+    passwordW := listW * 3 / 4
+    passwordH := 3
+    x = (uiW - passwordW) / 2
+    y = (uiH - passwordH) / 2
+    tui.password.SetRect(x, y, x + passwordW, y + passwordH)
 }
 
 func main() {
@@ -330,54 +409,30 @@ func main() {
     }
     defer ui.Close()
 
-    // additional colors
-    const ColorLightGreen ui.Color = 10
-    const ColorLightWhite ui.Color = 15
+    tui := newTui()
+    resizeTui(tui)
+    updateTui(tui, networks, knownNetworks)
 
-    l := widgets.NewList()
-    l.Title = "[ WiFi Networks ]"
-    l.Rows = generateUIRows(networks, knownNetworks)
-    l.BorderStyle = ui.NewStyle(ui.ColorWhite)
-    l.TitleStyle = ui.NewStyle(ui.ColorBlack, ColorLightWhite)
-    l.TextStyle = ui.NewStyle(ColorLightWhite)
-    l.SelectedRowStyle = ui.NewStyle(ui.ColorBlack, ColorLightWhite)
-    l.WrapText = false
-    uiW, uiH := ui.TerminalDimensions()
-    listW := 80
-    listH := 25
-    x := (uiW - listW) / 2
-    y := (uiH - listH) / 2
-    l.SetRect(x, y, x + listW, y + listH)
-
-    // status line with key help
-    p0 := widgets.NewParagraph()
-    p0.TextStyle = ui.NewStyle(15)
-    p0.Text = "[a](fg:green) - add network, [x](fg:green) - delete network, [q](fg:green) - quit"
-    p0.SetRect(x, y + listH + 1, x + listW, y + listH + 2)
-    p0.Border = false
-
-    // password entry field
-    pwInput := widgets.NewParagraph()
-    pwInput.TextStyle = ui.NewStyle(ColorLightGreen)
-    pwInput.BorderStyle = ui.NewStyle(ui.ColorGreen)
-    pwInput.TitleStyle = ui.NewStyle(ColorLightGreen)
-    pwInput.Title = "[ Password ]"
-    pwInput.Text = ""
-    passwordW := 60
-    passwordH := 3
-    x = (uiW - passwordW) / 2
-    y = (uiH - passwordH) / 2
-    pwInput.SetRect(x, y, x + passwordW, y + passwordH)
-    pwInput.Border = true
-
-    ui.Render(l)
-    ui.Render(p0)
+    ui.Render(tui.list)
+    ui.Render(tui.help)
 
     passwordPromptVisible := false
     password := ""
     uiEvents := ui.PollEvents()
     for {
         e := <-uiEvents
+        if e.ID == "<Resize>" {
+            ui.Clear()
+            resizeTui(tui)
+            updateTui(tui, networks, knownNetworks)
+            ui.Render(tui.list)
+            ui.Render(tui.help)
+            if passwordPromptVisible {
+                ui.Render(tui.password)
+            }
+            continue
+        }
+
         if passwordPromptVisible {
             if len(e.ID) == 1 {
                 password = password + e.ID
@@ -385,10 +440,10 @@ func main() {
                 switch e.ID {
                 case "<Enter>":
                     // update or add new network
-                    selectedNet := networks[l.SelectedRow]
+                    selectedNet := networks[tui.list.SelectedRow]
                     selectedNet.psk = password
                     knownNetworks = addNetwork(knownNetworks, selectedNet)
-                    l.Rows = generateUIRows(networks, knownNetworks)
+                    updateTui(tui, networks, knownNetworks)
                     passwordPromptVisible = false
                     password = ""
                 case "<Escape>", "<C-c>":
@@ -402,51 +457,51 @@ func main() {
                     password = password + " "
                 }
             }
-            pwInput.Text = password
+            tui.password.Text = password
         } else {
             switch e.ID {
             case "q", "<C-c>":
                 return
             case "j", "<Down>":
-                l.ScrollDown()
+                tui.list.ScrollDown()
             case "k", "<Up>":
-                l.ScrollUp()
+                tui.list.ScrollUp()
             case "<C-d>":
-                l.ScrollHalfPageDown()
+                tui.list.ScrollHalfPageDown()
             case "<C-u>":
-                l.ScrollHalfPageUp()
+                tui.list.ScrollHalfPageUp()
             case "<C-f>", "<PageDown>":
-                l.ScrollPageDown()
+                tui.list.ScrollPageDown()
             case "<C-b>", "<PageUp>":
-                l.ScrollPageUp()
+                tui.list.ScrollPageUp()
             case "<Home>":
-                l.ScrollTop()
+                tui.list.ScrollTop()
             case "<End>":
-                l.ScrollBottom()
+                tui.list.ScrollBottom()
             case "a":
-                selectedNet := networks[l.SelectedRow]
+                selectedNet := networks[tui.list.SelectedRow]
                 if selectedNet.security {
                     passwordPromptVisible = true
                 } else {
                     knownNetworks = addNetwork(knownNetworks, selectedNet)
-                    l.Rows = generateUIRows(networks, knownNetworks)
+                    updateTui(tui, networks, knownNetworks)
                 }
             case "x":
-                selectedNet := networks[l.SelectedRow]
+                selectedNet := networks[tui.list.SelectedRow]
                 // find and delete SSID from the list of known networks
                 for i, net := range knownNetworks {
                     if net.ssid == selectedNet.ssid {
                         knownNetworks = append(knownNetworks[:i], knownNetworks[i+1:]...)
                     }
                 }
-                l.Rows = generateUIRows(networks, knownNetworks)
+                updateTui(tui, networks, knownNetworks)
             }
         }
 
         if passwordPromptVisible {
-            ui.Render(pwInput)
+            ui.Render(tui.password)
         } else {
-            ui.Render(l)
+            ui.Render(tui.list)
         }
     }
 }
