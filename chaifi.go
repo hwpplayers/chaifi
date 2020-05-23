@@ -43,7 +43,7 @@ import (
     "github.com/gizak/termui/v3/widgets"
 )
 
-const chaifi_marker = "# CHAIFI: DO NOT EDIT BELOW THIS LINE"
+const chaifiMarker = "# CHAIFI: DO NOT EDIT BELOW THIS LINE"
 
 type Network struct {
     ssid, psk string
@@ -119,7 +119,7 @@ func loadConfFile(path string) ([]Network, error) {
     var network *Network = nil
     for scanner.Scan() {
         line := scanner.Text()
-        if strings.Index(line, chaifi_marker) == 0 {
+        if strings.Index(line, chaifiMarker) == 0 {
             inGeneratedSection = true
             continue
         }
@@ -250,13 +250,13 @@ func updateConfFile(path string, networks []Network) bool {
             newContent = newContent + line + "\n"
         }
         oldContent = oldContent + line + "\n"
-        if strings.Index(line, chaifi_marker) == 0 {
+        if strings.Index(line, chaifiMarker) == 0 {
             hasGeneratedSection = true
         }
     }
 
     if ! hasGeneratedSection {
-        newContent = newContent + chaifi_marker + "\n"
+        newContent = newContent + chaifiMarker + "\n"
     }
 
     for _, net := range networks {
@@ -394,19 +394,19 @@ func resizeTui(tui *Tui) {
 
 func main() {
     var iface string
-    var wpa_conf_file string
-    var restart_network bool
+    var wpaConfFile string
+    var restartNetwork bool
 
     flag.StringVar(&iface, "i", "wlan0", "wireless interface")
-    flag.StringVar(&wpa_conf_file, "f", "/etc/wpa_supplicant.conf", "path to wpa_supplicant.conf")
-    flag.BoolVar(&restart_network, "r", false, "restart netif service if config has changed")
+    flag.StringVar(&wpaConfFile, "f", "/etc/wpa_supplicant.conf", "path to wpa_supplicant.conf")
+    flag.BoolVar(&restartNetwork, "r", false, "restart netif service if config has changed")
 
     flag.Parse()
 
     networks := listScan(iface)
 
     // load known networks from the config file
-    knownNetworks, err := loadConfFile(wpa_conf_file)
+    knownNetworks, err := loadConfFile(wpaConfFile)
     if err != nil {
         log.Fatal(err)
     }
@@ -419,9 +419,9 @@ func main() {
     // save edited known networks on exit
     defer func() {
         ui.Close()
-        haveNewConfig := updateConfFile(wpa_conf_file, knownNetworks)
+        haveNewConfig := updateConfFile(wpaConfFile, knownNetworks)
         if haveNewConfig {
-            if restart_network {
+            if restartNetwork {
                 fmt.Println ("new config, restarting network...")
                 cmd := exec.Command("service", "netif", "restart", iface)
                 cmd.Run()
