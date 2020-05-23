@@ -43,7 +43,7 @@ import (
     "github.com/gizak/termui/v3/widgets"
 )
 
-const chaifiMarker = "# CHAIFI: DO NOT EDIT BELOW THIS LINE"
+type ColorScheme int
 
 type Network struct {
     ssid, psk string
@@ -56,6 +56,13 @@ type Tui struct {
     password *widgets.Paragraph
     listWidth int
 }
+
+const (
+    noScheme ColorScheme = 0
+    darkScheme ColorScheme = 1
+    lightScheme ColorScheme = 2
+    chaifiMarker = "# CHAIFI: DO NOT EDIT BELOW THIS LINE"
+)
 
 // simplified escape algorithm: escape backslash(\) and double quotes
 func escapeString(val string) string {
@@ -328,7 +335,7 @@ func addNetwork(networks []Network, newNet Network) []Network {
     return networks
 }
 
-func newTui() *Tui {
+func newTui(scheme ColorScheme) *Tui {
     tui := new(Tui)
 
     // additional colors
@@ -337,26 +344,43 @@ func newTui() *Tui {
 
     tui.list = widgets.NewList()
     tui.list.Title = "[ WiFi Networks ]"
-    tui.list.BorderStyle = ui.NewStyle(ui.ColorWhite)
-    tui.list.TitleStyle = ui.NewStyle(ui.ColorBlack, ColorLightWhite)
-    tui.list.TextStyle = ui.NewStyle(ColorLightWhite)
-    tui.list.SelectedRowStyle = ui.NewStyle(ui.ColorBlack, ColorLightWhite)
     tui.list.WrapText = false
 
     // status line with key help
     tui.help = widgets.NewParagraph()
-    tui.help.TextStyle = ui.NewStyle(15)
     tui.help.Text = "[a](fg:green) - add network, [x](fg:green) - delete network, [q](fg:green) - quit"
     tui.help.Border = false
 
     // password entry field
     tui.password = widgets.NewParagraph()
-    tui.password.TextStyle = ui.NewStyle(ColorLightGreen)
-    tui.password.BorderStyle = ui.NewStyle(ui.ColorGreen)
-    tui.password.TitleStyle = ui.NewStyle(ColorLightGreen)
     tui.password.Title = "[ Password ]"
     tui.password.Text = ""
     tui.password.Border = true
+
+    // set color style
+    if scheme == darkScheme {
+        tui.list.BorderStyle = ui.NewStyle(ui.ColorWhite)
+        tui.list.TitleStyle = ui.NewStyle(ui.ColorBlack, ColorLightWhite)
+        tui.list.TextStyle = ui.NewStyle(ColorLightWhite)
+        tui.list.SelectedRowStyle = ui.NewStyle(ui.ColorBlack, ColorLightWhite)
+
+        tui.help.TextStyle = ui.NewStyle(15)
+
+        tui.password.TextStyle = ui.NewStyle(ColorLightGreen)
+        tui.password.BorderStyle = ui.NewStyle(ui.ColorGreen)
+        tui.password.TitleStyle = ui.NewStyle(ColorLightGreen)
+    } else if scheme == lightScheme {
+        tui.list.BorderStyle = ui.NewStyle(ui.ColorWhite)
+        tui.list.TitleStyle = ui.NewStyle(ui.ColorBlack, ColorLightWhite)
+        tui.list.TextStyle = ui.NewStyle(ui.ColorBlack)
+        tui.list.SelectedRowStyle = ui.NewStyle(ui.ColorWhite, ui.ColorBlack)
+
+        tui.help.TextStyle = ui.NewStyle(ui.ColorBlack)
+
+        tui.password.TextStyle = ui.NewStyle(ColorLightGreen)
+        tui.password.BorderStyle = ui.NewStyle(ui.ColorGreen)
+        tui.password.TitleStyle = ui.NewStyle(ColorLightGreen)
+    }
 
     return tui
 }
@@ -396,10 +420,12 @@ func main() {
     var iface string
     var wpaConfFile string
     var restartNetwork bool
+    var useLightTheme bool
 
     flag.StringVar(&iface, "i", "wlan0", "wireless interface")
     flag.StringVar(&wpaConfFile, "f", "/etc/wpa_supplicant.conf", "path to wpa_supplicant.conf")
     flag.BoolVar(&restartNetwork, "r", false, "restart netif service if config has changed")
+    flag.BoolVar(&useLightTheme, "l", false, "use light color scheme")
 
     flag.Parse()
 
@@ -433,8 +459,11 @@ func main() {
         }
     }()
 
-
-    tui := newTui()
+    scheme := darkScheme
+    if useLightTheme {
+        scheme = lightScheme
+    }
+    tui := newTui(scheme)
     resizeTui(tui)
     updateTui(tui, networks, knownNetworks)
 
