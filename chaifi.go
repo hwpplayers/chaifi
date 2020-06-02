@@ -335,6 +335,17 @@ func addNetwork(networks []Network, newNet Network) []Network {
     return networks
 }
 
+func findNetwork(networks []Network, ssid string) int {
+    // check if the network is in the known list and if not - add it
+    for i, net := range networks {
+        if net.ssid == ssid {
+            return i
+        }
+    }
+
+    return -1
+}
+
 func newTui(scheme ColorScheme) *Tui {
     tui := new(Tui)
 
@@ -348,7 +359,7 @@ func newTui(scheme ColorScheme) *Tui {
 
     // status line with key help
     tui.help = widgets.NewParagraph()
-    tui.help.Text = "[a](fg:green) - add network, [x](fg:green) - delete network, [q](fg:green) - quit"
+    tui.help.Text = "[a](fg:green) - add, [x](fg:green) - delete, [e](fg:green) - edit, [q](fg:green) - quit"
     tui.help.Border = false
 
     // password entry field
@@ -495,8 +506,13 @@ func main() {
                 case "<Enter>":
                     // update or add new network
                     selectedNet := networks[tui.list.SelectedRow]
-                    selectedNet.psk = password
-                    knownNetworks = addNetwork(knownNetworks, selectedNet)
+                    net := findNetwork(knownNetworks, selectedNet.ssid)
+                    if net >= 0 {
+                        knownNetworks[net].psk = password
+                    } else {
+                        selectedNet.psk = password
+                        knownNetworks = addNetwork(knownNetworks, selectedNet)
+                    }
                     updateTui(tui, networks, knownNetworks)
                     passwordPromptVisible = false
                     password = ""
@@ -506,7 +522,9 @@ func main() {
                 case "<C-u>":
                     password = ""
                 case "<Backspace>", "<C-<Backspace>>":
-                    password = password[:len(password)-1]
+                    if len(password) > 0 {
+                        password = password[:len(password)-1]
+                    }
                 case "<Space>":
                     password = password + " "
                 }
@@ -539,6 +557,14 @@ func main() {
                 } else {
                     knownNetworks = addNetwork(knownNetworks, selectedNet)
                     updateTui(tui, networks, knownNetworks)
+                }
+            case "e":
+                selectedNet := networks[tui.list.SelectedRow]
+                net := findNetwork(knownNetworks, selectedNet.ssid)
+                if net >= 0 {
+                    passwordPromptVisible = true
+                    password = knownNetworks[net].psk
+                    tui.password.Text = password
                 }
             case "x":
                 selectedNet := networks[tui.list.SelectedRow]
